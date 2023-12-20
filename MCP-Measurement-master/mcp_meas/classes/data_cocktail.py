@@ -146,7 +146,7 @@ class DataCocktail:
 
     # == DATA LOADING
 
-    def load_data(self, format=None):
+    def load_data(self, format=None, lattice_axis=True):
         """
         Loads MCP data
         """
@@ -192,6 +192,10 @@ class DataCocktail:
 
         # - matlab file (from data_maker script)
         elif format == "matlab":
+            if lattice_axis:
+                col_offset=0
+            else:
+                col_offset=3
             # load .mat
             data = io.loadmat(data_path)
             # take momentum distribution
@@ -200,7 +204,7 @@ class DataCocktail:
             df_cols = ["kx", "ky", "kz"]
             df = pd.DataFrame()
             for i in range(len(df_cols)):
-                df[df_cols[i]] = k[:, i]
+                df[df_cols[i]] = k[:, i+col_offset]
             df.index.rename("Run", inplace=True)
             # store
             self.data = df
