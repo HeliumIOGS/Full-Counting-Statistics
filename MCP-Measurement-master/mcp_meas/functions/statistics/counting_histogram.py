@@ -21,7 +21,6 @@ from functools import partial
 
 # == low-level histogramming function
 
-
 def count_hist_old(
     k, k_range, dk_bin_list, remove=True, shift=(0, 0, 0), expand_range_if_needed=False,
 ):
@@ -35,13 +34,13 @@ def count_hist_old(
         k_range_list = 0.5 * n_bins_list * dk_bin_list
     else:
         # compute number of bins, and remove doublons
-        n_bins_list = np.uint(2 * k_range / dk_bin_list)
+        n_bins_list = np.uint(k_range / dk_bin_list)
         n_bins_list = np.unique(n_bins_list)
         k_range_list = [k_range for i in range(len(n_bins_list))]
-
     # -- initialize G0
     hist = []
     bins = np.zeros_like(n_bins_list, dtype=float)
+
     kx = np.squeeze(k[0]) + shift[0]
     ky = np.squeeze(k[1]) + shift[1]
     kz = np.squeeze(k[2]) + shift[2]
@@ -60,11 +59,12 @@ def count_hist_old(
         density = density.view()
         # store value
         hist.append(density)
-        bins[i_bin] = centers[1] - centers[0]
-
+        bins[i_bin] = dk_bin_list
+        #bins[i_bin] = centers[1] - centers[0]
+    
     N = np.sum(density)
     # -- return
-    return hist, bins, N
+    return hist, centers, bins, N, n_bins_list
 
 
 def count_hist(
@@ -113,6 +113,37 @@ def count_hist(
     return hist, dk
 
 
+def count_hist_non_uniform(
+    k, gridX, gridY, gridZ, remove=True, shift=(0, 0, 0), expand_range_if_needed=False,
+):
+    """
+    Local counting histogram
+    """
+    # -- initialize G0
+    hist = []
+
+    kx = np.squeeze(k[0]) + shift[0]
+    ky = np.squeeze(k[1]) + shift[1]
+    kz = np.squeeze(k[2]) + shift[2]
+    # -- loop on all dk_bins dk_bin_list
+    #for i_bin, n_bins in enumerate(n_bins_list):
+    # - generate histogram
+    # create histogram
+    density = bh.Histogram(gridX, gridY, gridZ, storage=bh.storage.Unlimited())
+    centers = (density.axes[0].centers, density.axes[1].centers, density.axes[2].centers)
+    bins = (density.axes[0].widths[0], density.axes[1].widths[0], density.axes[2].widths[0])
+    # fill with data
+    density.fill(kx, ky, kz)
+    # convert to array
+    density = density.view()
+    # store value
+    hist.append(density)
+    
+    
+    N = np.sum(density)
+    # -- return
+    return hist, centers, bins, N
+
 # == batch processing functions
 
 
@@ -152,6 +183,27 @@ def batch_process_count_hist(data_list, n_proc=4, **hist_params):
         out = []
         for i in tqdm(pool.imap(histPool, data_list), total=len(data_list)):
             out.append(i)
+    return out
+
+
+def batch_process_count_hist_non_uniform(data_list, n_proc=4, **hist_params):
+    """
+    Parallel processing of data_list
+    data_list must be a list :
+        data_list = [(kx_1, ky_1, kz_1), ... , (kx_N, ky_N, kz_N)]
+    where kx_1 is a list (array-like) of momentum, corresponding to run #1
+
+    returns
+    """
+
+    # define a local version of the histogram function with the good parameters
+    histPool = partial(count_hist_non_uniform, **hist_params)
+    # compute using a pool
+    with Pool(n_proc) as pool:
+        out = []
+        for i in tqdm(pool.imap(histPool, data_list), total=len(data_list)):
+            out.append(i)
+
     return out
 
 
